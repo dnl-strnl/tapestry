@@ -1,0 +1,15 @@
+db_path: data/chroma_db
+db_name: tapestry-1
+db_meta:
+  "hnsw:space": cosine
+db_result_limit: 100
+image_extensions: [".gif", ".jpg", ".jpeg", ".png", ".webp"]
+prompt_from_filename: ""
+
+embedding_model_address: http://localhost:8080/predictions/mobileclip
+embedding_dimension: 512
+embedding_image_size: [1024, 1024]
+embedding_batch_size: 32
+
+images_per_page: 100
+timeout: 10
