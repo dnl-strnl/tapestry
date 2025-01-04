@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, render_template, send_from_directory, url_for
 import hydra
 import os
-from os.path import basename, exists, join
+from os.path import basename, exists, join, splitext
 from werkzeug.utils import secure_filename
 from omegaconf import DictConfig
 import pathlib
@@ -78,7 +78,6 @@ def make_app(cfg):
             )
             filepath = join(app.config['UPLOAD_FOLDER'], filename)
             file.save(filepath)
-
             return jsonify({
                 'success': True, 'filename': filename, 'isQueryImage': True
             })

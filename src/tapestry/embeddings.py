@@ -11,10 +11,6 @@ from typing import Any, Dict, List
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-def normalize_embedding(embedding):
-    emb = np.array(embedding, dtype=np.float32)
-    return emb / np.linalg.norm(emb)
-
 def process_image(image_path: str, image_size:tuple) -> str:
     try:
         with Image.open(image_path).convert('RGB') as image:
@@ -51,7 +47,7 @@ def get_embeddings(
                 if isinstance(response_data, dict) and 'body' in response_data:
                     body_data = json.loads(response_data['body'])
                     if 'image' in body_data:
-                        embedding = normalize_embedding(body_data['image'][0])
+                        embedding = np.array(body_data['image'][0], dtype=np.float32)
                         embeddings['image'] = embedding
                         log.info(f'{image_path}')
                     else:
@@ -74,7 +70,7 @@ def get_embeddings(
                 if isinstance(response_data, dict) and 'body' in response_data:
                     body_data = json.loads(response_data['body'])
                     if 'text' in body_data:
-                        embedding = normalize_embedding(body_data['text'][0])
+                        embedding = np.array(body_data['text'][0], dtype=np.float32)
                         embeddings['text'] = embedding
                         log.info(f'{text_string}')
                     else:

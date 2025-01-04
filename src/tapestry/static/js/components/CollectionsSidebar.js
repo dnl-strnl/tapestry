@@ -47,14 +47,9 @@ const CollectionsSidebar = ({ onCollectionSelect, activeCollection }) => {
 
         try {
             const dataStr = e.dataTransfer.getData('application/json');
-            console.log('Dropped data:', dataStr);
-
             const data = JSON.parse(dataStr);
-            console.log('Parsed data:', data);
 
             if (data.type === 'internal' && data.path) {
-                console.log('Using image path:', data.path);
-
                 const response = await fetch(`/collections/${collectionId}/images`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -64,12 +59,18 @@ const CollectionsSidebar = ({ onCollectionSelect, activeCollection }) => {
                 });
 
                 if (!response.ok) {
-                    const errorData = await response.json();
-                    throw new Error(errorData.error || 'Failed to add image to collection');
+                    throw new Error('Failed to add image to collection');
+                }
+
+                if (activeCollection === collectionId) {
+                    onCollectionSelect(collectionId);
                 }
             }
         } catch (error) {
             console.error('Error handling image drop:', error);
+        } finally {
+            const dragEndEvent = new CustomEvent('dragoperationend');
+            window.dispatchEvent(dragEndEvent);
         }
     };
 
@@ -180,12 +181,7 @@ const CollectionsSidebar = ({ onCollectionSelect, activeCollection }) => {
         ),
 
         React.createElement('button', {
-            onClick: (e) => {
-                // Only navigate if we're not in a drag operation...
-                if (!(window.state && window.state.isDragging)) {
-                    onCollectionSelect?.(null);
-                }
-            },
+            onClick: () => onCollectionSelect?.(null),
             style: {
                 ...styles.collectionItem,
                 backgroundColor: !activeCollection ? '#2196F3' : 'transparent'
@@ -195,12 +191,7 @@ const CollectionsSidebar = ({ onCollectionSelect, activeCollection }) => {
         collections.map((collection) =>
             React.createElement('button', {
                 key: collection.id,
-                onClick: (e) => {
-                    // Only navigate if we're not in a drag operation...
-                    if (!(window.state && window.state.isDragging)) {
-                        onCollectionSelect?.(collection.id);
-                    }
-                },
+                onClick: () => onCollectionSelect?.(collection.id),
                 onDragOver: (e) => {
                     e.preventDefault();
                     setDragOverId(collection.id);
@@ -217,12 +208,4 @@ const CollectionsSidebar = ({ onCollectionSelect, activeCollection }) => {
     );
 };
 
-// Debug wrapper.
-const WrappedCollectionsSidebar = (props) => {
-    console.log('CollectionsSidebar rendering with props:', props);
-    const element = React.createElement(CollectionsSidebar, props);
-    console.log('CollectionsSidebar element:', element);
-    return element;
-};
-
-window.CollectionsSidebar = WrappedCollectionsSidebar;
+window.CollectionsSidebar = CollectionsSidebar;

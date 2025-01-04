@@ -23,6 +23,14 @@ const ImagePreviewModal = ({ images, initialIndex, onClose }) => {
         return () => window.removeEventListener('keydown', handleKeyPress);
     }, [images.length, onClose]);
 
+    const copyToClipboard = (text) => {
+        navigator.clipboard.writeText(text).then(() => {
+            console.log('Copied to clipboard:', text);
+        }).catch((err) => {
+            console.error('Failed to copy:', err);
+        });
+    };
+
     const containerStyle = {
         position: 'fixed',
         top: 0,
@@ -45,20 +53,6 @@ const ImagePreviewModal = ({ images, initialIndex, onClose }) => {
         position: 'relative'
     };
 
-    const imageContainerStyle = {
-        flex: 1,
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        position: 'relative'
-    };
-
-    const imageStyle = {
-        maxHeight: '80vh',
-        maxWidth: '100%',
-        objectFit: 'contain'
-    };
-
     const sidebarStyle = {
         width: '300px',
         backgroundColor: 'rgb(17, 24, 39)',
@@ -66,56 +60,42 @@ const ImagePreviewModal = ({ images, initialIndex, onClose }) => {
         borderLeft: '1px solid rgba(255, 255, 255, 0.1)'
     };
 
-    const buttonStyle = {
-        position: 'absolute',
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        color: 'white',
-        border: 'none',
-        borderRadius: '50%',
-        width: '40px',
-        height: '40px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        cursor: 'pointer'
-    };
-
     return React.createElement('div', { style: containerStyle },
         React.createElement('div', { style: contentStyle },
-            React.createElement('div', { style: imageContainerStyle },
+            React.createElement('div', {
+                style: { flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }
+            },
                 React.createElement('button', {
-                    style: { ...buttonStyle, left: '20px' },
+                    style: { position: 'absolute', left: '20px', backgroundColor: 'rgba(0, 0, 0, 0.5)', color: 'white', border: 'none', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
                     onClick: () => setCurrentIndex(prev => prev > 0 ? prev - 1 : images.length - 1)
                 }, '←'),
                 React.createElement('img', {
                     src: currentImage.url || `/uploads/${currentImage.filename}`,
                     alt: currentImage.filename,
-                    style: imageStyle
+                    style: { maxHeight: '80vh', maxWidth: '100%', objectFit: 'contain' }
                 }),
                 React.createElement('button', {
-                    style: { ...buttonStyle, right: '20px' },
+                    style: { position: 'absolute', right: '20px', backgroundColor: 'rgba(0, 0, 0, 0.5)', color: 'white', border: 'none', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
                     onClick: () => setCurrentIndex(prev => prev < images.length - 1 ? prev + 1 : 0)
                 }, '→')
             ),
             React.createElement('div', { style: sidebarStyle },
                 React.createElement('button', {
                     onClick: onClose,
-                    style: {
-                        position: 'absolute',
-                        right: '1rem',
-                        top: '1rem',
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        color: 'white',
-                        cursor: 'pointer'
-                    }
+                    style: { position: 'absolute', right: '1rem', top: '1rem', backgroundColor: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }
                 }, '✕'),
-                React.createElement('h2', {
-                    style: { color: 'white', marginBottom: '1rem' }
-                }, 'Image Details'),
-                React.createElement('div', { style: { color: 'white' } },
+                React.createElement('h2', { style: { color: 'white', marginBottom: '1rem' } }, 'Image Details'),
+                React.createElement('div', { style: { color: 'white', marginBottom: '1rem' } },
                     React.createElement('p', null, `Filename: ${currentImage.filename}`),
-                    currentImage.prompt && React.createElement('p', null, `Prompt: ${currentImage.prompt}`)
+                    React.createElement('button', {
+                        onClick: () => copyToClipboard(currentImage.filename),
+                        style: { margin: '0.5rem 0', padding: '0.5rem 1rem', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '0.25rem', cursor: 'pointer' }
+                    }, 'Copy Filename'),
+                    currentImage.prompt && React.createElement('p', null, `Prompt: ${currentImage.prompt}`),
+                    currentImage.prompt && React.createElement('button', {
+                        onClick: () => copyToClipboard(currentImage.prompt),
+                        style: { margin: '0.5rem 0', padding: '0.5rem 1rem', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '0.25rem', cursor: 'pointer' }
+                    }, 'Copy Prompt')
                 ),
                 React.createElement('p', {
                     style: { color: 'rgba(255, 255, 255, 0.6)', marginTop: '1rem' }

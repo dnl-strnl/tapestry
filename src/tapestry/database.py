@@ -57,16 +57,25 @@ class DatabaseManager:
             new_metadata = []
 
             for image_path in batch:
-                if self.config['IMAGE_FOLDER'] in image_path:
-                    file_id = str(uuid.uuid4())
-                    new_files.append(image_path)
-                    new_ids.append(file_id)
-                    new_metadata.append({
-                        "type": "image",
-                        "filename": basename(image_path),
-                        "original_path": image_path,
-                        "processed": True
-                    })
+                if self.config['IMAGE_FOLDER'] not in image_path:
+                    continue
+
+                existing_entries = self.collection.get(
+                    where={"filename": basename(image_path)}
+                )
+
+                if existing_entries and len(existing_entries['ids']) > 0:
+                    continue
+
+                file_id = str(uuid.uuid4())
+                new_files.append(image_path)
+                new_ids.append(file_id)
+                new_metadata.append({
+                    "type": "image",
+                    "filename": basename(image_path),
+                    "original_path": image_path,
+                    "processed": True
+                })
 
             if new_files:
                 try:
@@ -141,7 +150,7 @@ class DatabaseManager:
         thread.daemon = True
         thread.start()
 
-    def perform_search(self, query_type: str, query: str = None, query_path: str = None, limit: int = 50) -> Dict:
+    def perform_search(self, query_type: str, query: str = None, query_path: str = None, limit: int = 100) -> Dict:
         try:
             if query_type == 'text':
                 if not query:
