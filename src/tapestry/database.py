@@ -23,7 +23,6 @@ class DatabaseManager:
         embedding_model_address: str,
         embedding_dimension: int,
         embedding_image_size: int = (1024, 1024),
-        db_result_limit: int = 100,
         image_extensions: list = [".gif", ".jpg", ".jpeg", ".png", ".webp"],
         batch_size: int = 32,
     ):
@@ -33,7 +32,6 @@ class DatabaseManager:
         self.db_name = db_name
         self.db_meta = OmegaConf.to_container(db_meta, resolve=True)
 
-        self.db_result_limit = db_result_limit
         self.image_extensions = image_extensions
         self.batch_size = batch_size
 
@@ -150,7 +148,13 @@ class DatabaseManager:
         thread.daemon = True
         thread.start()
 
-    def perform_search(self, query_type: str, query: str = None, query_path: str = None, limit: int = 100) -> Dict:
+    def perform_search(
+        self,
+        query_type: str,
+        query: str = None,
+        query_path: str = None,
+        limit: int = None,
+    ) -> Dict:
         try:
             if query_type == 'text':
                 if not query:
@@ -160,7 +164,7 @@ class DatabaseManager:
 
                 results = self.collection.query(
                     query_texts=[query],
-                    n_results=limit * 2 if limit else self.db_result_limit,
+                    n_results=limit,
                     include=['metadatas', 'distances', 'documents']
                 )
             elif query_type == 'image':
@@ -171,7 +175,7 @@ class DatabaseManager:
 
                 results = self.collection.query(
                     query_texts=[query_path],
-                    n_results=limit * 2 if limit else self.db_result_limit,
+                    n_results=limit,
                     include=['metadatas', 'distances', 'documents']
                 )
             else:
@@ -190,6 +194,7 @@ class DatabaseManager:
         query_path: str = None,
         limit: int = 100
     ) -> Dict:
+
         unique_results = {}
 
         for idx, (doc, metadata, distance) in enumerate(zip(
@@ -214,7 +219,7 @@ class DatabaseManager:
 
         formatted_results = list(unique_results.values())
         formatted_results.sort(key=lambda x: x['distance'])
-        formatted_results = formatted_results[:limit]
+        formatted_results = formatted_results[:max(limit, len(formatted_results))]
 
         for idx, result in enumerate(formatted_results):
             result['rank'] = idx + 1

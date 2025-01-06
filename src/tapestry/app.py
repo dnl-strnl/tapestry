@@ -25,6 +25,7 @@ def make_app(cfg):
     app.config['FAVICON_IMAGE'] = str(DATA_DIR / 'favicon.ico')
 
     images_per_page = cfg.images_per_page
+    db_result_limit = cfg.db_result_limit
 
     db_manager = DatabaseManager(
         app.config,
@@ -34,7 +35,6 @@ def make_app(cfg):
         cfg.embedding_model_address,
         cfg.embedding_dimension,
         cfg.embedding_image_size,
-        cfg.db_result_limit,
         cfg.image_extensions,
         cfg.embedding_batch_size,
     )
@@ -86,7 +86,8 @@ def make_app(cfg):
     def search():
         data = request.get_json()
         query_type = data.get('type')
-        limit = data.get('limit', images_per_page)
+        limit = db_result_limit
+        # limit = data.get('limit', images_per_page)
 
         try:
             if query_type == 'text':
@@ -170,7 +171,6 @@ def make_app(cfg):
             return jsonify({'error': f"{remove_files_exception=}"}), 500
 
     return app
-
 
 @hydra.main(version_base=None, config_path="config", config_name="app")
 def main(cfg: DictConfig):

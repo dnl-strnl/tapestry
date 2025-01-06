@@ -1,5 +1,6 @@
 const ImagePreviewModal = ({ images, initialIndex, onClose }) => {
     const [currentIndex, setCurrentIndex] = React.useState(initialIndex);
+    const [clickedButton, setClickedButton] = React.useState(null); // Tracks which button was clicked
 
     if (!images || !images[currentIndex]) {
         console.error('Invalid images or index.');
@@ -23,13 +24,25 @@ const ImagePreviewModal = ({ images, initialIndex, onClose }) => {
         return () => window.removeEventListener('keydown', handleKeyPress);
     }, [images.length, onClose]);
 
-    const copyToClipboard = (text) => {
+    const copyToClipboard = (text, buttonId) => {
         navigator.clipboard.writeText(text).then(() => {
             console.log('Copied to clipboard:', text);
+            setClickedButton(buttonId);
+            setTimeout(() => setClickedButton(null), 350);
         }).catch((err) => {
             console.error('Failed to copy:', err);
         });
     };
+
+    const getButtonStyle = (buttonId) => ({
+        margin: '0.5rem 0',
+        padding: '0.5rem 1rem',
+        backgroundColor: clickedButton === buttonId ? 'gray' : '#4CAF50',
+        color: 'white',
+        border: 'none',
+        borderRadius: '0.25rem',
+        cursor: 'pointer',
+    });
 
     const containerStyle = {
         position: 'fixed',
@@ -88,13 +101,13 @@ const ImagePreviewModal = ({ images, initialIndex, onClose }) => {
                 React.createElement('div', { style: { color: 'white', marginBottom: '1rem' } },
                     React.createElement('p', null, `Filename: ${currentImage.filename}`),
                     React.createElement('button', {
-                        onClick: () => copyToClipboard(currentImage.filename),
-                        style: { margin: '0.5rem 0', padding: '0.5rem 1rem', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '0.25rem', cursor: 'pointer' }
+                        onClick: () => copyToClipboard(currentImage.filename, 'filename'),
+                        style: getButtonStyle('filename')
                     }, 'Copy Filename'),
                     currentImage.prompt && React.createElement('p', null, `Prompt: ${currentImage.prompt}`),
                     currentImage.prompt && React.createElement('button', {
-                        onClick: () => copyToClipboard(currentImage.prompt),
-                        style: { margin: '0.5rem 0', padding: '0.5rem 1rem', backgroundColor: '#4CAF50', color: 'white', border: 'none', borderRadius: '0.25rem', cursor: 'pointer' }
+                        onClick: () => copyToClipboard(currentImage.prompt, 'prompt'),
+                        style: getButtonStyle('prompt')
                     }, 'Copy Prompt')
                 ),
                 React.createElement('p', {

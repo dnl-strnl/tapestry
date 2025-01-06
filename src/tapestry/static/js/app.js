@@ -1,27 +1,38 @@
 // State management.
 const state = {
-    currentPage: 1,
-    isLoading: false,
-    hasMore: true,
-    isSearching: false,
-    gridWidth: 4,
-    allImageData: [],
-    isDragging: false,
-    dragIntent: null,
-    draggedIndex: null
+  currentPage: 1,
+  isLoading: false,
+  hasMore: true,
+  isSearching: false,
+  gridWidth: 4,
+  allImageData: [],
+  isDragging: false,
+  dragIntent: null,
+  draggedIndex: null,
+  totalImages: 0,
+  imagesPerPage: 100
 };
 
 // DOM Elements.
 const elements = {
-    dropZone: document.getElementById('dropZone'),
-    fileInput: document.getElementById('fileInput'),
-    imageGrid: document.getElementById('imageGrid'),
-    searchBar: document.querySelector('.search-bar'),
-    loadingIndicator: document.getElementById('loadingIndicator'),
-    processingStatus: document.getElementById('processingStatus'),
-    gridWidth: document.getElementById('gridWidth'),
-    collectionsSidebar: document.getElementById('collectionsSidebar')
+  searchBar: document.querySelector('.search-bar'),
+  dropZone: document.getElementById('dropZone'),
+  fileInput: document.getElementById('fileInput'),
+  imageGrid: document.getElementById('imageGrid'),
+  gridWidth: document.getElementById('gridWidth'),
+  collectionsSidebar: document.getElementById('collectionsSidebar'),
+  loadingIndicator: document.getElementById('loadingIndicator'),
+  processingStatus: document.getElementById('processingStatus')
 };
+
+async function handleCollectionSelect(collectionId) {
+    resetPagination();
+    state.activeCollection = collectionId;
+    state.isSearching = false;
+    state.isDragging = false;
+    state.dragIntent = null;
+    await loadImages();
+}
 
 const logger = {
     info: (message, data) => {
@@ -54,6 +65,13 @@ const debouncedSearch = debounce((query) => {
         loadImages();
     }
 }, 300);
+
+function resetPagination() {
+    state.currentPage = 1;
+    state.hasMore = true;
+    state.allImageData = [];
+    state.totalImages = 0;
+}
 
 function getImageUrl(image) {
     if (image.url) return image.url;
@@ -95,29 +113,23 @@ async function handleDragOver(e, index) {
     const newImages = [...state.allImageData];
     const draggedItem = newImages[state.draggedIndex];
 
-    // Remove dragged item from array and insert at new position.
     newImages.splice(state.draggedIndex, 1);
     newImages.splice(index, 0, draggedItem);
 
-    // Update local state immediately.
     state.allImageData = newImages;
     state.draggedIndex = index;
 
-    // Update UI.
     displayResults(newImages);
 
-    // Create positions array for backend update.
     const positions = newImages.map((item, idx) => ({
         path: item.path || item.filename,
         position: idx
     }));
 
-    // Update backend.
     try {
         await updateCollectionOrder(positions);
     } catch (error) {
         console.error('Error updating collection order:', error);
-        // Reload images to restore correct order if update fails
         await loadImages();
     }
 }
@@ -139,7 +151,6 @@ function displayResults(results, append = false) {
         div.className = 'image-item';
         div.draggable = true;
 
-        // Calculate the current position in the overall dataset.
         const globalIndex = append ? state.allImageData.length - results.length + index : index;
 
         const img = document.createElement('img');
@@ -148,8 +159,8 @@ function displayResults(results, append = false) {
         img.loading = 'lazy';
         img.className = 'w-full h-full object-cover';
 
-        // Add drag event listeners for collection reordering.
         if (state.activeCollection) {
+            // Add drag event listeners for collection reordering.
             div.addEventListener('dragstart', (e) => handleDragStart(e, index));
             div.addEventListener('dragend', handleDragEnd);
             div.addEventListener('dragover', (e) => handleDragOver(e, index));
@@ -162,7 +173,10 @@ function displayResults(results, append = false) {
                     type: 'internal',
                     path: result.path || result.filename
                 };
-                e.dataTransfer.setData('application/json', JSON.stringify(imageData));
+                e.dataTransfer.setData(
+                    'application/json',
+                    JSON.stringify(imageData)
+                );
                 e.dataTransfer.effectAllowed = 'copy';
             });
         }
@@ -184,13 +198,14 @@ async function loadImages(page = 1, append = false) {
     try {
         let url = state.activeCollection
             ? `/collections/${state.activeCollection}`
-            : `/get-all-images?page=${page}&per_page=1000`;
+            : `/get-all-images?page=${page}&per_page=${state.imagesPerPage}`;
 
         const response = await fetch(url);
         const data = await response.json();
 
         if (!append) {
             state.allImageData = [];
+            state.totalImages = data.total;
         }
 
         let processedImages;
@@ -202,7 +217,6 @@ async function loadImages(page = 1, append = false) {
                 url: getImageUrl(img)
             }));
         } else {
-            // Handle regular image grid format.
             processedImages = (data.images || []).map(img => ({
                 filename: img.filename || img.path || img,
                 url: img.url || `/images/${img.filename || img.path || img}`,
@@ -219,7 +233,8 @@ async function loadImages(page = 1, append = false) {
 
         displayResults(processedImages, append);
 
-        state.hasMore = data.has_more;
+        state.hasMore = state.allImageData.length < state.totalImages;
+
         if (data.processing_status) {
             updateProcessingStatus(data.processing_status);
         }
@@ -277,16 +292,37 @@ function initializeCollectionsSidebar() {
         e.stopPropagation();
 
         try {
-            const data = JSON.parse(e.dataTransfer.getData('application/json'));
+            const jsonData = e.dataTransfer.getData('application/json');
+
+            if (!jsonData) {
+                logger.error('No JSON data found in drop event.');
+                return;
+            }
+            let data;
+            try {
+                data = JSON.parse(jsonData);
+            } catch (parseError) {
+                logger.error('Failed to parse drop data as JSON:', parseError);
+                return;
+            }
+
+            if (!data || typeof data !== 'object') {
+                logger.error('Invalid drop data format.');
+                return;
+            }
+
             if (data.type === 'internal' && data.path) {
                 await addImageToCollection(data.path);
+                logger.info('Successfully added image to collection:', data.path);
+            } else {
+                logger.error('Invalid drop data type or missing path.');
             }
         } catch (error) {
             logger.error('Error handling collection drop:', error);
+        } finally {
+            state.isDragging = false;
+            state.dragIntent = null;
         }
-
-        state.isDragging = false;
-        state.dragIntent = null;
     });
 
     try {
@@ -303,6 +339,7 @@ function initializeCollectionsSidebar() {
 async function performSearch(type, query, image = null) {
     if (state.isLoading) return;
 
+    resetPagination();
     state.isLoading = true;
     state.isSearching = true;
     elements.loadingIndicator.style.display = 'block';
@@ -311,7 +348,13 @@ async function performSearch(type, query, image = null) {
         const response = await fetch('/search', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ type, query, image, limit: 20 })
+            body: JSON.stringify({
+                type,
+                query,
+                image,
+                limit: state.imagesPerPage,
+                page: state.currentPage
+            })
         });
 
         const data = await response.json();
@@ -319,7 +362,10 @@ async function performSearch(type, query, image = null) {
             throw new Error(data.error || 'Search failed');
         }
 
+        state.totalImages = data.total || 0;
         state.allImageData = data.results || [];
+        state.hasMore = state.allImageData.length < state.totalImages;
+
         displayResults(data.results || [], false);
 
     } catch (error) {
@@ -342,7 +388,6 @@ function showImagePreview(index) {
     if (existingContainer) {
         existingContainer.remove();
     }
-
     // Create new container.
     const previewContainer = document.createElement('div');
     previewContainer.id = 'previewContainer';
@@ -399,7 +444,6 @@ async function handleImageUpload(file) {
     }
 }
 
-
 function updateDraggableState() {
     const imageItems = document.querySelectorAll('.image-item');
     imageItems.forEach(item => {
@@ -409,15 +453,6 @@ function updateDraggableState() {
             item.classList.remove('collection-draggable');
         }
     });
-}
-
-async function handleCollectionSelect(collectionId) {
-    state.activeCollection = collectionId;
-    state.currentPage = 1;
-    state.isSearching = false;
-    state.isDragging = false;
-    state.dragIntent = null;
-    await loadImages();
 }
 
 async function addImageToCollection(imagePath) {
@@ -553,22 +588,6 @@ elements.dropZone.addEventListener('click', () => {
     elements.fileInput.click();
 });
 
-window.addEventListener('dragoperationend', () => {
-    state.isDragging = false;
-    state.dragIntent = null;
-});
-
-window.addEventListener('scroll', async () => {
-    if (state.isLoading || !state.hasMore || state.isSearching) return;
-    // Check if we're near the bottom of the page.
-    const scrollPosition = window.scrollY + window.innerHeight;
-    const bottomThreshold = document.documentElement.scrollHeight - 100;
-    if (scrollPosition >= bottomThreshold) {
-        state.currentPage++;
-        await loadImages(state.currentPage, true);
-    }
-});
-
 function updateProcessingStatus(status) {
     if (status.is_processing) {
         elements.processingStatus.style.display = 'block';
@@ -591,6 +610,30 @@ async function pollProcessingStatus() {
         logger.error('Error polling status:', error);
     }
 }
+
+let scrollTimeout = null;
+window.addEventListener('scroll', () => {
+    if (scrollTimeout) return;
+
+    scrollTimeout = setTimeout(async () => {
+        if (state.isLoading || !state.hasMore || state.isSearching) {
+            scrollTimeout = null;
+            return;
+        }
+        const scrollPosition = window.scrollY + window.innerHeight;
+        const bottomThreshold = document.documentElement.scrollHeight - 300;
+        if (scrollPosition >= bottomThreshold) {
+            state.currentPage++;
+            await loadImages(state.currentPage, true);
+        }
+        scrollTimeout = null;
+    }, 150);
+});
+
+window.addEventListener('dragoperationend', () => {
+    state.isDragging = false;
+    state.dragIntent = null;
+});
 
 window.addEventListener('load', () => {
     initializeCollectionsSidebar();

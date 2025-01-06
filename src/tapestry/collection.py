@@ -1,8 +1,11 @@
-from flask import jsonify, request
+from flask import jsonify, request, send_file
+import io
 import json
+import os
 import sqlite3
 from typing import Dict, List, Optional
 import uuid
+import zipfile
 
 class CollectionManager:
     def __init__(self, db_path: str):
@@ -64,6 +67,45 @@ class CollectionManager:
             cursor.execute("DELETE FROM collections WHERE id = ?", (collection_id,))
             conn.commit()
             return cursor.rowcount > 0
+
+    def export_collection(self, collection_id: str) -> io.BytesIO:
+        memory_file = io.BytesIO()
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            # Get collection details
+            cursor.execute("SELECT name FROM collections WHERE id = ?", (collection_id,))
+            collection_name = cursor.fetchone()[0]
+
+            # Get all images in the collection
+            cursor.execute("""
+                SELECT image_path, position
+                FROM collection_items
+                WHERE collection_id = ?
+                ORDER BY position
+            """, (collection_id,))
+            images = [{"path": row[0], "position": row[1]} for row in cursor.fetchall()]
+
+            # Create zip file
+            with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+                # Add metadata JSON
+                metadata = {
+                    "id": collection_id,
+                    "name": collection_name,
+                    "images": [{"filename": os.path.basename(img["path"]), "position": img["position"]} for img in images]
+                }
+                zf.writestr('metadata.json', json.dumps(metadata, indent=2))
+
+                # Add image files
+                for img in images:
+                    image_path = img["path"]
+                    if os.path.isfile(image_path):
+                        # Add file to zip with just its basename to avoid full path in zip
+                        zf.write(image_path, os.path.basename(image_path))
+
+        # Seek to start of file
+        memory_file.seek(0)
+        return memory_file
 
     def add_images_to_collection(
         self,
@@ -238,6 +280,19 @@ def register_collection_routes(app, collections_manager):
             if success:
                 return jsonify({'message': 'Positions updated successfully!'})
             return jsonify({'error': 'Failed to update positions'}), 500
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/collections/<collection_id>/export', methods=['GET'])
+    def export_collection(collection_id):
+        try:
+            memory_file = collections_manager.export_collection(collection_id)
+            return send_file(
+                memory_file,
+                mimetype='application/zip',
+                as_attachment=True,
+                download_name=f'collection-{collection_id}.zip'
+            )
         except Exception as e:
             return jsonify({'error': str(e)}), 500
 
