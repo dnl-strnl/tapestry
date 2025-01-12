@@ -161,7 +161,18 @@ function displayResults(results, append = false) {
 
         if (state.activeCollection) {
             // Add drag event listeners for collection reordering.
-            div.addEventListener('dragstart', (e) => handleDragStart(e, index));
+            div.addEventListener('dragstart', (e) => {
+                handleDragStart(e, index);
+
+                // Set up for search-by-image.
+                const imageData = {
+                    type: 'internal',
+                    path: result.path || result.filename,
+                    sourceCollectionId: state.activeCollection
+                };
+                e.dataTransfer.setData('application/json', JSON.stringify(imageData));
+                e.dataTransfer.effectAllowed = 'copyMove';
+            });
             div.addEventListener('dragend', handleDragEnd);
             div.addEventListener('dragover', (e) => handleDragOver(e, index));
         } else {
@@ -271,57 +282,52 @@ function initializeCollectionsSidebar() {
         return;
     }
 
-    // Add drag enter/over handlers for collections.
     sidebarElement.addEventListener('dragenter', (e) => {
+        e.preventDefault();
         if (state.isDragging) {
-            e.preventDefault();
             state.dragIntent = 'collection';
+            sidebarElement.classList.add('drag-highlight');
+        }
+    });
+
+    sidebarElement.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        if (state.isDragging) {
+            state.dragIntent = null;
+            sidebarElement.classList.remove('drag-highlight');
         }
     });
 
     sidebarElement.addEventListener('dragover', (e) => {
+        e.preventDefault();
         if (state.isDragging) {
-            e.preventDefault();
             e.dataTransfer.dropEffect = 'copy';
         }
     });
 
-    // Add drop handler for collections.
     sidebarElement.addEventListener('drop', async (e) => {
         e.preventDefault();
         e.stopPropagation();
+        sidebarElement.classList.remove('drag-highlight');
 
         try {
             const jsonData = e.dataTransfer.getData('application/json');
-
             if (!jsonData) {
                 logger.error('No JSON data found in drop event.');
                 return;
             }
-            let data;
-            try {
-                data = JSON.parse(jsonData);
-            } catch (parseError) {
-                logger.error('Failed to parse drop data as JSON:', parseError);
-                return;
-            }
 
-            if (!data || typeof data !== 'object') {
-                logger.error('Invalid drop data format.');
-                return;
-            }
-
+            const data = JSON.parse(jsonData);
             if (data.type === 'internal' && data.path) {
                 await addImageToCollection(data.path);
                 logger.info('Successfully added image to collection:', data.path);
-            } else {
-                logger.error('Invalid drop data type or missing path.');
             }
         } catch (error) {
             logger.error('Error handling collection drop:', error);
         } finally {
             state.isDragging = false;
             state.dragIntent = null;
+            sidebarElement.classList.remove('drag-highlight');
         }
     });
 
@@ -500,6 +506,9 @@ async function updateCollectionOrder(positions) {
 
 elements.dropZone.addEventListener('dragenter', (e) => {
     e.preventDefault();
+    if (state.isDragging) {
+        state.dragIntent = 'search';
+    }
     elements.dropZone.classList.add('drag-highlight');
 });
 
@@ -515,6 +524,14 @@ elements.dropZone.addEventListener('dragleave', (e) => {
     elements.dropZone.classList.remove('drag-highlight');
 });
 
+window.addEventListener('dragend', () => {
+    state.isDragging = false;
+    state.dragIntent = null;
+    document.querySelectorAll('.drag-highlight').forEach(el => {
+        el.classList.remove('drag-highlight');
+    });
+});
+
 elements.dropZone.addEventListener('drop', async (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -526,8 +543,18 @@ elements.dropZone.addEventListener('drop', async (e) => {
         if (dataStr) {
             const data = JSON.parse(dataStr);
             if (data.type === 'internal' && data.path) {
-                logger.info('Processing internal drag for image search:', data.path);
-                await performSearch('image', null, data.path);
+                // Clear drag state before processing.
+                const currentDragIntent = state.dragIntent;
+                state.isDragging = false;
+                state.dragIntent = null;
+
+                if (currentDragIntent === 'collection' && state.activeCollection) {
+                    logger.info('Adding image to collection:', data.path);
+                    await addImageToCollection(data.path);
+                } else {
+                    logger.info('Processing image search:', data.path);
+                    await performSearch('image', null, data.path);
+                }
                 return;
             }
         }
@@ -541,34 +568,6 @@ elements.dropZone.addEventListener('drop', async (e) => {
     } finally {
         state.isDragging = false;
         state.dragIntent = null;
-    }
-});
-
-elements.dropZone.addEventListener('drop', async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    elements.dropZone.classList.remove('dragover');
-    elements.dropZone.classList.remove('drag-highlight');
-
-    try {
-        // Check for internal drag.
-        const internalData = e.dataTransfer.getData('application/json');
-        if (internalData) {
-            const data = JSON.parse(internalData);
-            if (data.type === 'internal' && data.path &&
-                (!state.activeCollection || state.dragIntent === 'search')) {
-                logger.info('Processing internal drag for image search:', data.path);
-                await performSearch('image', null, data.path);
-                return;
-            }
-        }
-
-        const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('image/')) {
-            await handleImageUpload(file);
-        }
-    } catch (error) {
-        logger.error('Error handling drop:', error);
     }
 });
 
