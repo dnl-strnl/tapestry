@@ -15,14 +15,14 @@ class CollectionManager:
     def init_db(self):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("""
+            cursor.execute('''
                 CREATE TABLE IF NOT EXISTS collections (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
-            cursor.execute("""
+            ''')
+            cursor.execute('''
                 CREATE TABLE IF NOT EXISTS collection_items (
                     collection_id TEXT,
                     image_path TEXT,
@@ -31,7 +31,7 @@ class CollectionManager:
                     FOREIGN KEY (collection_id) REFERENCES collections(id) ON DELETE CASCADE,
                     PRIMARY KEY (collection_id, image_path)
                 )
-            """)
+            ''')
             conn.commit()
 
     def create_collection(self, name: str) -> Dict:
@@ -39,23 +39,23 @@ class CollectionManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT INTO collections (id, name) VALUES (?, ?)",
+                'INSERT INTO collections (id, name) VALUES (?, ?)',
                 (collection_id, name)
             )
             conn.commit()
-        return {"id": collection_id, "name": name}
+        return dict(id=collection_id, name=name)
 
     def get_collections(self) -> List[Dict]:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT id, name FROM collections ORDER BY created_at DESC")
-            return [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
+            cursor.execute('SELECT id, name FROM collections ORDER BY created_at DESC')
+            return [{'id': row[0], 'name': row[1]} for row in cursor.fetchall()]
 
     def update_collection(self, collection_id: str, name: str) -> bool:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "UPDATE collections SET name = ? WHERE id = ?",
+                'UPDATE collections SET name = ? WHERE id = ?',
                 (name, collection_id)
             )
             conn.commit()
@@ -64,7 +64,7 @@ class CollectionManager:
     def delete_collection(self, collection_id: str) -> bool:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM collections WHERE id = ?", (collection_id,))
+            cursor.execute('DELETE FROM collections WHERE id = ?', (collection_id,))
             conn.commit()
             return cursor.rowcount > 0
 
@@ -73,37 +73,27 @@ class CollectionManager:
 
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            # Get collection details
-            cursor.execute("SELECT name FROM collections WHERE id = ?", (collection_id,))
+            cursor.execute('SELECT name FROM collections WHERE id = ?', (collection_id,))
             collection_name = cursor.fetchone()[0]
 
-            # Get all images in the collection
-            cursor.execute("""
+            cursor.execute('''
                 SELECT image_path, position
                 FROM collection_items
                 WHERE collection_id = ?
                 ORDER BY position
-            """, (collection_id,))
-            images = [{"path": row[0], "position": row[1]} for row in cursor.fetchall()]
+            ''', (collection_id,))
 
-            # Create zip file
+            images = [{'path': row[0], 'position': row[1]} for row in cursor.fetchall()]
+
             with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-                # Add metadata JSON
-                metadata = {
-                    "id": collection_id,
-                    "name": collection_name,
-                    "images": [{"filename": os.path.basename(img["path"]), "position": img["position"]} for img in images]
-                }
+                image_data = [dict(filename=os.path.basename(img['path']), index=i) for i,img in enumerate(images)]
+                metadata = dict(id=collection_id, name=collection_name, images=image_data)
                 zf.writestr('metadata.json', json.dumps(metadata, indent=2))
-
-                # Add image files
                 for img in images:
-                    image_path = img["path"]
+                    image_path = img['path']
                     if os.path.isfile(image_path):
-                        # Add file to zip with just its basename to avoid full path in zip
                         zf.write(image_path, os.path.basename(image_path))
 
-        # Seek to start of file
         memory_file.seek(0)
         return memory_file
 
@@ -117,7 +107,7 @@ class CollectionManager:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT COALESCE(MAX(position), -1) FROM collection_items WHERE collection_id = ?",
+                    'SELECT COALESCE(MAX(position), -1) FROM collection_items WHERE collection_id = ?',
                     (collection_id,)
                 )
                 max_position = cursor.fetchone()[0]
@@ -126,7 +116,7 @@ class CollectionManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.executemany(
-                "INSERT OR REPLACE INTO collection_items (collection_id, image_path, position) VALUES (?, ?, ?)",
+                'INSERT OR REPLACE INTO collection_items (collection_id, image_path, position) VALUES (?, ?, ?)',
                 [(collection_id, path, pos) for path, pos in zip(image_paths, positions)]
             )
             conn.commit()
@@ -136,7 +126,7 @@ class CollectionManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.executemany(
-                "DELETE FROM collection_items WHERE collection_id = ? AND image_path = ?",
+                'DELETE FROM collection_items WHERE collection_id = ? AND image_path = ?',
                 [(collection_id, path) for path in image_paths]
             )
             conn.commit()
@@ -146,22 +136,22 @@ class CollectionManager:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                """
+                '''
                 SELECT image_path, position
                 FROM collection_items
                 WHERE collection_id = ?
                 ORDER BY position
-                """,
+                ''',
                 (collection_id,)
             )
-            return [{"path": row[0], "position": row[1]} for row in cursor.fetchall()]
+            return [{'path': row[0], 'position': row[1]} for row in cursor.fetchall()]
 
     def update_image_positions(self, collection_id: str, position_updates: List[Dict[str, int]]) -> bool:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.executemany(
-                "UPDATE collection_items SET position = ? WHERE collection_id = ? AND image_path = ?",
-                [(update["position"], collection_id, update["path"]) for update in position_updates]
+                'UPDATE collection_items SET position = ? WHERE collection_id = ? AND image_path = ?',
+                [(update['position'], collection_id, update['path']) for update in position_updates]
             )
             conn.commit()
             return cursor.rowcount > 0
@@ -171,9 +161,9 @@ def register_collection_routes(app, collections_manager):
     def get_collections():
         try:
             collections = collections_manager.get_collections()
-            return jsonify({'collections': collections})
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return jsonify(dict(collections=collections))
+        except Exception as get_collections_exception:
+            return jsonify(dict(error=get_collections_exception)), 500
 
     @app.route('/collections', methods=['POST'])
     def create_collection():
@@ -181,20 +171,19 @@ def register_collection_routes(app, collections_manager):
             data = request.get_json()
             name = data.get('name')
             if not name:
-                return jsonify({'error': 'Collection name is required.'}), 400
-
+                return jsonify(dict(error='Collection name is required.')), 400
             collection = collections_manager.create_collection(name)
             return jsonify(collection), 201
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+        except Exception as create_collection_exception:
+            return jsonify(dict(error=create_collection_exception)), 500
 
     @app.route('/collections/<collection_id>', methods=['GET'])
     def get_collection(collection_id):
         try:
             images = collections_manager.get_collection_images(collection_id)
-            return jsonify({'images': images})
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+            return jsonify(dict(images=images))
+        except Exception as get_collection_exception:
+            return jsonify(dict(error=get_collection_exception)), 500
 
     @app.route('/collections/<collection_id>', methods=['PATCH'])
     def update_collection(collection_id):
@@ -202,24 +191,24 @@ def register_collection_routes(app, collections_manager):
             data = request.get_json()
             name = data.get('name')
             if not name:
-                return jsonify({'error': 'Collection name is required.'}), 400
+                return jsonify(dict(error='Collection name is required.')), 400
 
             success = collections_manager.update_collection(collection_id, name)
             if success:
-                return jsonify({'message': 'Collection updated successfully!'})
-            return jsonify({'error': 'Collection not found'}), 404
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+                return jsonify(dict(message='Collection updated successfully!'))
+            return jsonify(dict(error='Collection not found.')), 404
+        except Exception as update_collection_exception:
+            return jsonify(dict(error=update_collection_exception)), 500
 
     @app.route('/collections/<collection_id>', methods=['DELETE'])
     def delete_collection(collection_id):
         try:
             success = collections_manager.delete_collection(collection_id)
             if success:
-                return jsonify({'message': 'Collection deleted successfully!'})
-            return jsonify({'error': 'Collection not found'}), 404
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+                return jsonify(dict(message='Collection deleted successfully!'))
+            return jsonify(dict(error='Collection not found.')), 404
+        except Exception as delete_collection_exception:
+            return jsonify(dict(error=delete_collection_exception)), 500
 
     @app.route('/collections/<collection_id>/images', methods=['POST'])
     def add_images_to_collection(collection_id):
@@ -229,19 +218,17 @@ def register_collection_routes(app, collections_manager):
             positions = data.get('positions')
 
             if not image_paths:
-                return jsonify({'error': 'Image paths are required.'}), 400
+                return jsonify(dict(error='Image paths are required.')), 400
 
             success = collections_manager.add_images_to_collection(
-                collection_id,
-                image_paths,
-                positions
+                collection_id, image_paths, positions
             )
 
             if success:
-                return jsonify({'message': 'Images added successfully!'})
-            return jsonify({'error': 'Failed to add images'}), 500
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+                return jsonify(dict(message='Images added successfully!'))
+            return jsonify(dict(error='Failed to add images.')), 500
+        except Exception as add_to_collection_exception:
+            return jsonify(dict(error=add_to_collection_exception)), 500
 
     @app.route('/collections/<collection_id>/images', methods=['DELETE'])
     def remove_images_from_collection(collection_id):
@@ -250,18 +237,17 @@ def register_collection_routes(app, collections_manager):
             image_paths = data.get('image_paths', [])
 
             if not image_paths:
-                return jsonify({'error': 'Image paths are required.'}), 400
+                return jsonify(dict(error='Image paths are required.')), 400
 
             success = collections_manager.remove_images_from_collection(
-                collection_id,
-                image_paths
+                collection_id, image_paths
             )
 
             if success:
-                return jsonify({'message': 'Images removed successfully!'})
-            return jsonify({'error': 'Failed to remove images'}), 500
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+                return jsonify(dict(message='Images removed successfully!'))
+            return jsonify(dict(error='Failed to remove images.')), 500
+        except Exception as remove_image_exception:
+            return jsonify(dict(error=remove_image_exception)), 500
 
     @app.route('/collections/<collection_id>/positions', methods=['PATCH'])
     def update_image_positions(collection_id):
@@ -270,18 +256,17 @@ def register_collection_routes(app, collections_manager):
             position_updates = data.get('positions', [])
 
             if not position_updates:
-                return jsonify({'error': 'Position updates are required'}), 400
+                return jsonify(dict(error='Position updates are required.')), 400
 
             success = collections_manager.update_image_positions(
-                collection_id,
-                position_updates
+                collection_id, position_updates
             )
 
             if success:
-                return jsonify({'message': 'Positions updated successfully!'})
-            return jsonify({'error': 'Failed to update positions'}), 500
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+                return jsonify(dict(message='Positions updated successfully!'))
+            return jsonify(dict(error='Failed to update positions.')), 500
+        except Exception as update_position_exception:
+            return jsonify(dict(error=update_position_exception)), 500
 
     @app.route('/collections/<collection_id>/export', methods=['GET'])
     def export_collection(collection_id):
@@ -291,9 +276,9 @@ def register_collection_routes(app, collections_manager):
                 memory_file,
                 mimetype='application/zip',
                 as_attachment=True,
-                download_name=f'collection-{collection_id}.zip'
+                download_name=f'{collection_id}-collection.zip'
             )
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
+        except Exception as export_collection_error:
+            return jsonify(dict(error=export_collection_error)), 500
 
     return app
