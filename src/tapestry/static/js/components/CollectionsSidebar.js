@@ -93,16 +93,33 @@ const CollectionsSidebar = ({ onCollectionSelect, activeCollection }) => {
             const data = JSON.parse(dataStr);
 
             if (data.type === 'internal' && data.path) {
-                const response = await fetch(`/collections/${collectionId}/images`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        image_paths: [data.path]
-                    })
-                });
+                // Check if this is a cross-collection drag.
+                if (data.sourceCollectionId && data.sourceCollectionId !== collectionId) {
+                    // This is a cross-collection drag, make a copy...
+                    const response = await fetch(`/collections/${collectionId}/images`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image_paths: [data.path]
+                        })
+                    });
 
-                if (!response.ok) {
-                    throw new Error('Failed to add image to collection');
+                    if (!response.ok) {
+                        throw new Error('Failed to copy image to collection');
+                    }
+                } else {
+                    // Normal drag to add image.
+                    const response = await fetch(`/collections/${collectionId}/images`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            image_paths: [data.path]
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to add image to collection.');
+                    }
                 }
 
                 if (activeCollection === collectionId) {
@@ -260,6 +277,10 @@ const CollectionsSidebar = ({ onCollectionSelect, activeCollection }) => {
                 backgroundColor: '#444',
             },
         },
+        dragOver: {
+            backgroundColor: 'rgba(33, 150, 243, 0.1)',
+            border: '2px dashed #2196F3',
+        }
     };
 
     return React.createElement('div', { style: styles.sidebarWrapper },

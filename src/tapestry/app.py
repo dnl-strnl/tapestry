@@ -1,11 +1,11 @@
 from flask import Flask, request, jsonify, render_template, send_from_directory, url_for
 import hydra
+from omegaconf import DictConfig
 import os
 from os.path import basename, exists, join, splitext
-from werkzeug.utils import secure_filename
-from omegaconf import DictConfig
 import pathlib
 import uuid
+from werkzeug.utils import secure_filename
 
 from tapestry.collection import CollectionManager, register_collection_routes
 from tapestry.database import DatabaseManager
@@ -22,7 +22,6 @@ def make_app(cfg):
     app.config['PROCESSING_STATUS'] = {
         'is_processing': False, 'processed_count': 0, 'total_count': 0
     }
-    app.config['FAVICON_IMAGE'] = str(DATA_DIR / 'favicon.ico')
 
     images_per_page = cfg.images_per_page
     db_result_limit = cfg.db_result_limit
@@ -129,10 +128,8 @@ def make_app(cfg):
         for doc, metadata in zip(results['documents'], results['metadatas']):
             filename = basename(doc)
 
-            if exists(join(app.config['IMAGE_FOLDER'], filename)):
-                url = f'/images/{filename}'
-            else:
-                url = f'/uploads/{filename}'
+            is_upload = exists(join(app.config['IMAGE_FOLDER'], filename))
+            url = f'/images/{filename}' if is_upload else f'/uploads/{filename}'
 
             if filename not in unique_images:
                 unique_images[filename] = {

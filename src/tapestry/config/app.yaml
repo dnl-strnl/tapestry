@@ -1,4 +1,4 @@
-db_path: data/chroma_db
+db_path: ${hydra:runtime.cwd}/data/chroma_db
 db_name: tapestry-1
 db_meta:
   "hnsw:space": cosine
