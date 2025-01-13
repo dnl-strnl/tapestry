@@ -128,10 +128,8 @@ def make_app(cfg):
         for doc, metadata in zip(results['documents'], results['metadatas']):
             filename = basename(doc)
 
-            if exists(join(app.config['IMAGE_FOLDER'], filename)):
-                url = f'/images/{filename}'
-            else:
-                url = f'/uploads/{filename}'
+            is_upload = exists(join(app.config['IMAGE_FOLDER'], filename))
+            url = f'/images/{filename}' if is_upload else f'/uploads/{filename}'
 
             if filename not in unique_images:
                 unique_images[filename] = {

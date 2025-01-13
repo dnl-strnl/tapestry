@@ -86,7 +86,10 @@ class CollectionManager:
             images = [{'path': row[0], 'position': row[1]} for row in cursor.fetchall()]
 
             with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-                image_data = [dict(filename=os.path.basename(img['path']), index=i) for i,img in enumerate(images)]
+                image_data = [
+                    dict(filename=os.path.basename(img['path']), index=i) \
+                        for i,img in enumerate(images)
+                ]
                 metadata = dict(id=collection_id, name=collection_name, images=image_data)
                 zf.writestr('metadata.json', json.dumps(metadata, indent=2))
                 for img in images:
