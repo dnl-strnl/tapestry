@@ -1,6 +1,7 @@
-const ImagePreviewModal = ({ images, initialIndex, onClose }) => {
+const ImagePreviewModal = ({ images: initialImages, initialIndex, onClose, collectionId, onImageRemoved }) => {
     const [currentIndex, setCurrentIndex] = React.useState(initialIndex);
-    const [clickedButton, setClickedButton] = React.useState(null); // Tracks which button was clicked
+    const [images, setImages] = React.useState(initialImages);
+    const [clickedButton, setClickedButton] = React.useState(null);
 
     if (!images || !images[currentIndex]) {
         console.error('Invalid images or index.');
@@ -34,15 +35,35 @@ const ImagePreviewModal = ({ images, initialIndex, onClose }) => {
         });
     };
 
-    const getButtonStyle = (buttonId) => ({
-        margin: '0.5rem 0',
-        padding: '0.5rem 1rem',
-        backgroundColor: clickedButton === buttonId ? 'gray' : '#4CAF50',
-        color: 'white',
-        border: 'none',
-        borderRadius: '0.25rem',
-        cursor: 'pointer',
-    });
+    const handleImageRemoval = async () => {
+        try {
+            const response = await fetch(`/collections/${collectionId}/images`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    image_paths: [currentImage.path || currentImage.filename]
+                })
+            });
+
+            if (response.ok) {
+                const newImages = images.filter((_, index) => index !== currentIndex);
+                setImages(newImages);
+                onImageRemoved?.();
+
+                if (newImages.length === 0) {
+                    onClose();
+                } else {
+                    setCurrentIndex(prev =>
+                        prev === images.length - 1 ? prev - 1 : prev
+                    );
+                }
+            } else {
+                console.error('Failed to remove image from collection.');
+            }
+        } catch (error) {
+            console.error('Error removing image:', error);
+        }
+    };
 
     const containerStyle = {
         position: 'fixed',
@@ -50,7 +71,7 @@ const ImagePreviewModal = ({ images, initialIndex, onClose }) => {
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: 'rgba(0, 0, 0, 0.75)',
+        backgroundColor: 'rgba(0, 0, 0, 0.85)',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
@@ -58,61 +79,174 @@ const ImagePreviewModal = ({ images, initialIndex, onClose }) => {
     };
 
     const contentStyle = {
-        backgroundColor: 'rgb(17, 24, 39)',
-        borderRadius: '0.5rem',
+        backgroundColor: 'rgb(36, 36, 36)',
+        borderRadius: '0.75rem',
         width: '90vw',
         height: '90vh',
         display: 'flex',
-        position: 'relative'
+        position: 'relative',
+        overflow: 'hidden',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
+    };
+
+    const imageContainerStyle = {
+        flex: 1,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'relative',
+        backgroundColor: 'rgb(29, 29, 29)'
+    };
+
+    const imageStyle = {
+        maxHeight: '85vh',
+        maxWidth: '100%',
+        objectFit: 'contain'
+    };
+
+    const buttonStyle = {
+        position: 'absolute',
+        backgroundColor: 'rgba(0, 0, 0, 0.6)',
+        color: 'white',
+        border: 'none',
+        borderRadius: '50%',
+        width: '44px',
+        height: '44px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        fontSize: '1.25rem',
+        backdropFilter: 'blur(4px)'
     };
 
     const sidebarStyle = {
-        width: '300px',
-        backgroundColor: 'rgb(17, 24, 39)',
-        padding: '1.5rem',
-        borderLeft: '1px solid rgba(255, 255, 255, 0.1)'
+        width: '320px',
+        backgroundColor: 'rgb(36, 36, 36)',
+        padding: '1.75rem',
+        borderLeft: '1px solid rgba(255, 255, 255, 0.1)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1.25rem',
+        overflowY: 'auto'
+    };
+
+    const closeButtonStyle = {
+        position: 'absolute',
+        right: '1.25rem',
+        top: '1.25rem',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        border: 'none',
+        color: 'white',
+        cursor: 'pointer',
+        width: '32px',
+        height: '32px',
+        borderRadius: '6px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: 'all 0.2s ease',
+        fontSize: '1.25rem'
+    };
+
+    const actionButtonStyle = (buttonId) => ({
+        backgroundColor: clickedButton === buttonId ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.1)',
+        color: 'white',
+        border: 'none',
+        borderRadius: '6px',
+        padding: '0.5rem 1rem',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        width: '100%',
+        textAlign: 'left',
+        marginTop: '0.5rem'
+    });
+
+    const detailItemStyle = {
+        color: 'white',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.25rem'
+    };
+
+    const labelStyle = {
+        color: 'rgba(255, 255, 255, 0.6)',
+        fontSize: '0.875rem',
+        fontWeight: 500
+    };
+
+    const valueStyle = {
+        color: 'white',
+        fontSize: '0.9375rem',
+        lineHeight: '1.5',
+        wordBreak: 'break-word'
     };
 
     return React.createElement('div', { style: containerStyle },
         React.createElement('div', { style: contentStyle },
-            React.createElement('div', {
-                style: { flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }
-            },
+            React.createElement('div', { style: imageContainerStyle },
                 React.createElement('button', {
-                    style: { position: 'absolute', left: '20px', backgroundColor: 'rgba(0, 0, 0, 0.5)', color: 'white', border: 'none', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
+                    style: { ...buttonStyle, left: '20px' },
                     onClick: () => setCurrentIndex(prev => prev > 0 ? prev - 1 : images.length - 1)
                 }, '←'),
                 React.createElement('img', {
                     src: currentImage.url || `/uploads/${currentImage.filename}`,
                     alt: currentImage.filename,
-                    style: { maxHeight: '80vh', maxWidth: '100%', objectFit: 'contain' }
+                    style: imageStyle
                 }),
                 React.createElement('button', {
-                    style: { position: 'absolute', right: '20px', backgroundColor: 'rgba(0, 0, 0, 0.5)', color: 'white', border: 'none', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
+                    style: { ...buttonStyle, right: '20px' },
                     onClick: () => setCurrentIndex(prev => prev < images.length - 1 ? prev + 1 : 0)
                 }, '→')
             ),
             React.createElement('div', { style: sidebarStyle },
                 React.createElement('button', {
                     onClick: onClose,
-                    style: { position: 'absolute', right: '1rem', top: '1rem', backgroundColor: 'transparent', border: 'none', color: 'white', cursor: 'pointer' }
-                }, '✕'),
-                React.createElement('h2', { style: { color: 'white', marginBottom: '1rem' } }, 'Image Details'),
-                React.createElement('div', { style: { color: 'white', marginBottom: '1rem' } },
-                    React.createElement('p', null, `Filename: ${currentImage.filename}`),
+                    style: closeButtonStyle
+                }, '×'),
+                React.createElement('h2', {
+                    style: {
+                        color: 'white',
+                        fontSize: '1.25rem',
+                        fontWeight: '600',
+                        marginBottom: '0.5rem'
+                    }
+                }, 'Image Details'),
+                React.createElement('div', { style: detailItemStyle },
+                    React.createElement('span', { style: labelStyle }, 'Filename'),
+                    React.createElement('span', { style: valueStyle }, currentImage.filename),
                     React.createElement('button', {
                         onClick: () => copyToClipboard(currentImage.filename, 'filename'),
-                        style: getButtonStyle('filename')
-                    }, 'Copy Filename'),
-                    currentImage.prompt && React.createElement('p', null, `Prompt: ${currentImage.prompt}`),
-                    currentImage.prompt && React.createElement('button', {
+                        style: actionButtonStyle('filename')
+                    }, 'Copy Filename')
+                ),
+                currentImage.prompt && React.createElement('div', { style: detailItemStyle },
+                    React.createElement('span', { style: labelStyle }, 'Prompt'),
+                    React.createElement('span', { style: valueStyle }, currentImage.prompt),
+                    React.createElement('button', {
                         onClick: () => copyToClipboard(currentImage.prompt, 'prompt'),
-                        style: getButtonStyle('prompt')
+                        style: actionButtonStyle('prompt')
                     }, 'Copy Prompt')
                 ),
-                React.createElement('p', {
-                    style: { color: 'rgba(255, 255, 255, 0.6)', marginTop: '1rem' }
-                }, `Image ${currentIndex + 1} of ${images.length}`)
+                React.createElement('div', {
+                    style: {
+                        color: 'rgba(255, 255, 255, 0.6)',
+                        marginTop: 'auto',
+                        fontSize: '0.875rem',
+                        textAlign: 'center'
+                    }
+                }, [
+                    collectionId && React.createElement('button', {
+                        onClick: handleImageRemoval,
+                        style: {
+                            ...actionButtonStyle('remove'),
+                            backgroundColor: 'rgba(220, 53, 69, 0.2)',
+                            marginBottom: '0.75rem'
+                        }
+                    }, '🗑️ Remove from Collection'),
+                    `Image ${currentIndex + 1} of ${images.length}`
+                ])
             )
         )
     );

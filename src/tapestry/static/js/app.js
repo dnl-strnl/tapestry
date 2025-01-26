@@ -402,12 +402,18 @@ function showImagePreview(index) {
     try {
         const root = ReactDOM.createRoot(previewContainer);
         // Create the modal element with the correct data.
-        const modalElement = React.createElement(window.ImagePreviewModal, {
-            images: state.allImageData,
-            initialIndex: index,
-            onClose: () => {
-                root.unmount();
-                previewContainer.remove();
+        const modalElement = React.createElement(
+              window.ImagePreviewModal, {
+              images: state.allImageData,
+              initialIndex: index,
+              collectionId: state.activeCollection,
+              onImageRemoved: () => {
+                  // Reload the collection images after removal
+                  loadImages();
+              },
+              onClose: () => {
+                  root.unmount();
+                  previewContainer.remove();
             }
         });
         // Render the modal.
