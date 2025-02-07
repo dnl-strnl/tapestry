@@ -9,6 +9,7 @@ const ImagePreviewModal = ({ images: initialImages, initialIndex, onClose, colle
     }
 
     const currentImage = images[currentIndex];
+    const currentDataset = window.state?.currentDataset;
 
     React.useEffect(() => {
         const handleKeyPress = (e) => {
@@ -191,9 +192,13 @@ const ImagePreviewModal = ({ images: initialImages, initialIndex, onClose, colle
                     onClick: () => setCurrentIndex(prev => prev > 0 ? prev - 1 : images.length - 1)
                 }, '←'),
                 React.createElement('img', {
-                    src: currentImage.url || `/uploads/${currentImage.filename}`,
+                    src: window.utils.getImageUrl(currentImage, currentDataset),
                     alt: currentImage.filename,
-                    style: imageStyle
+                    style: imageStyle,
+                    onError: (e) => {
+                        console.error('Failed to load image:', e.target.src);
+                        e.target.src = '/static/default.png';
+                    }
                 }),
                 React.createElement('button', {
                     style: { ...buttonStyle, right: '20px' },

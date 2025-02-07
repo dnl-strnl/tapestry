@@ -10,7 +10,9 @@ const state = {
   dragIntent: null,
   draggedIndex: null,
   totalImages: 0,
-  imagesPerPage: 100
+  imagesPerPage: 100,
+  currentDataset: null,
+  activeCollection: null
 };
 
 // DOM Elements.
@@ -24,6 +26,111 @@ const elements = {
   loadingIndicator: document.getElementById('loadingIndicator'),
   processingStatus: document.getElementById('processingStatus')
 };
+
+elements.datasetSelector = document.getElementById('datasetSelector');
+
+function initializeDatasetSelector() {
+    if (!elements.datasetSelector) {
+        console.error('Dataset selector container not found!');
+        return;
+    }
+    createDatasetSelector();
+    fetchAndPopulateDatasets();
+}
+
+function createDatasetSelector() {
+    elements.datasetSelector.innerHTML = '';
+
+    const container = document.createElement('div');
+    container.className = 'search-container';
+
+    const controlsDiv = document.createElement('div');
+    controlsDiv.className = 'search-controls';
+
+    const select = document.createElement('select');
+    select.className = 'search-bar';
+    select.id = 'datasetSelect';
+
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Select a dataset...';
+    defaultOption.disabled = true;
+    defaultOption.selected = true;
+    select.appendChild(defaultOption);
+
+    controlsDiv.appendChild(select);
+    container.appendChild(controlsDiv);
+    elements.datasetSelector.appendChild(container);
+
+    select.addEventListener('change', async (e) => {
+        console.log("Dataset changed to:", e.target.value);
+        await handleDatasetChange(e.target.value);
+    });
+
+    return select;
+}
+
+async function fetchAndPopulateDatasets() {
+    try {
+        const response = await fetch('/api/datasets');
+        const data = await response.json();
+        console.log("Fetched datasets:", data);
+
+        const select = document.getElementById('datasetSelect');
+        if (!select) {
+            console.error("Dataset select element not found.");
+            return;
+        }
+
+        // Clear existing options except default.
+        while (select.options.length > 1) {
+            select.remove(1);
+        }
+
+        if (!data.datasets || data.datasets.length === 0) {
+            console.log("No datasets found.");
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No datasets found.';
+            option.disabled = true;
+            select.appendChild(option);
+            return;
+        }
+
+        data.datasets.forEach(dataset => {
+            const option = document.createElement('option');
+            option.value = dataset.id;
+            option.textContent = dataset.name;
+            select.appendChild(option);
+        });
+
+        // Select first dataset by default.
+        if (data.datasets.length > 0) {
+            const firstDataset = data.datasets[0];
+            select.value = firstDataset.id;
+            state.currentDataset = firstDataset.id;
+            handleDatasetChange(firstDataset.id);
+        }
+    } catch (error) {
+        console.error('Error fetching datasets:', error);
+        const errorMessage = document.createElement('p');
+        errorMessage.className = 'search-status';
+        errorMessage.textContent = 'Error loading datasets';
+        elements.datasetSelector.appendChild(errorMessage);
+    }
+}
+
+async function handleDatasetChange(datasetId) {
+    console.log("Handling dataset change:", datasetId);
+    if (!datasetId) {
+        console.log("No dataset ID provided");
+        return;
+    }
+
+    state.currentDataset = datasetId;
+    resetPagination();
+    await loadImages();
+}
 
 async function handleCollectionSelect(collectionId) {
     resetPagination();
@@ -74,12 +181,7 @@ function resetPagination() {
 }
 
 function getImageUrl(image) {
-    if (image.url) return image.url;
-    let filename = image.path || image.filename;
-    if (filename.includes('/')) {
-        filename = filename.split('/').pop();
-    }
-    return `/images/${filename}`;
+    return window.utils.getImageUrl(image, state.currentDataset);
 }
 
 function updateGridLayout() {
@@ -160,15 +262,13 @@ function displayResults(results, append = false) {
         img.className = 'w-full h-full object-cover';
 
         if (state.activeCollection) {
-            // Add drag event listeners for collection reordering.
             div.addEventListener('dragstart', (e) => {
                 handleDragStart(e, index);
-
-                // Set up for search-by-image.
                 const imageData = {
                     type: 'internal',
                     path: result.path || result.filename,
-                    sourceCollectionId: state.activeCollection
+                    sourceCollectionId: state.activeCollection,
+                    dataset_id: state.currentDataset
                 };
                 e.dataTransfer.setData('application/json', JSON.stringify(imageData));
                 e.dataTransfer.effectAllowed = 'copyMove';
@@ -176,13 +276,13 @@ function displayResults(results, append = false) {
             div.addEventListener('dragend', handleDragEnd);
             div.addEventListener('dragover', (e) => handleDragOver(e, index));
         } else {
-            // Regular drag behavior for non-collection view.
             div.addEventListener('dragstart', (e) => {
                 state.isDragging = true;
                 state.dragIntent = null;
                 const imageData = {
                     type: 'internal',
-                    path: result.path || result.filename
+                    path: result.path || result.filename,
+                    dataset_id: state.currentDataset
                 };
                 e.dataTransfer.setData(
                     'application/json',
@@ -194,14 +294,12 @@ function displayResults(results, append = false) {
 
         div.appendChild(img);
         elements.imageGrid.appendChild(div);
-
-        // Add click event listener for preview.
         div.addEventListener('click', () => showImagePreview(globalIndex));
     });
 }
 
 async function loadImages(page = 1, append = false) {
-    if (state.isLoading || (!append && state.isSearching)) return;
+    if (state.isLoading || (!append && state.isSearching) || !state.currentDataset) return;
 
     state.isLoading = true;
     elements.loadingIndicator.style.display = 'block';
@@ -209,7 +307,7 @@ async function loadImages(page = 1, append = false) {
     try {
         let url = state.activeCollection
             ? `/collections/${state.activeCollection}`
-            : `/get-all-images?page=${page}&per_page=${state.imagesPerPage}`;
+            : `/get-all-images?dataset_id=${state.currentDataset}&page=${page}&per_page=${state.imagesPerPage}`;
 
         const response = await fetch(url);
         const data = await response.json();
@@ -343,7 +441,7 @@ function initializeCollectionsSidebar() {
 }
 
 async function performSearch(type, query, image = null) {
-    if (state.isLoading) return;
+    if (state.isLoading || !state.currentDataset) return;
 
     resetPagination();
     state.isLoading = true;
@@ -355,6 +453,7 @@ async function performSearch(type, query, image = null) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                dataset_id: state.currentDataset,
                 type,
                 query,
                 image,
@@ -376,7 +475,7 @@ async function performSearch(type, query, image = null) {
 
     } catch (error) {
         logger.error('Search error:', error);
-        elements.imageGrid.innerHTML = '<p class="error-message">Search failed</p>';
+        elements.imageGrid.innerHTML = '<p class="error-message">Search failed.</p>';
     } finally {
         state.isLoading = false;
         elements.loadingIndicator.style.display = 'none';
@@ -401,14 +500,12 @@ function showImagePreview(index) {
 
     try {
         const root = ReactDOM.createRoot(previewContainer);
-        // Create the modal element with the correct data.
         const modalElement = React.createElement(
               window.ImagePreviewModal, {
               images: state.allImageData,
               initialIndex: index,
               collectionId: state.activeCollection,
               onImageRemoved: () => {
-                  // Reload the collection images after removal
                   loadImages();
               },
               onClose: () => {
@@ -416,7 +513,6 @@ function showImagePreview(index) {
                   previewContainer.remove();
             }
         });
-        // Render the modal.
         root.render(modalElement);
         logger.info('Modal rendered successfully with index:', index);
     } catch (error) {
@@ -425,12 +521,18 @@ function showImagePreview(index) {
 }
 
 async function handleImageUpload(file) {
+    if (!state.currentDataset) {
+        alert('Select a dataset.');
+        return;
+    }
+
     elements.loadingIndicator.style.display = 'block';
 
     try {
         logger.info('Uploading image:', file.name);
         const formData = new FormData();
         formData.append('file', file);
+        formData.append('dataset_id', state.currentDataset);
 
         const response = await fetch('/upload', {
             method: 'POST',
@@ -480,7 +582,7 @@ async function addImageToCollection(imagePath) {
         });
 
         if (!response.ok) {
-            throw new Error('Failed to add image to collection');
+            throw new Error('Failed to add image to collection.');
         }
 
         await loadImages();
@@ -505,7 +607,6 @@ async function updateCollectionOrder(positions) {
         }
     } catch (error) {
         console.error('Error updating collection order:', error);
-        // Reload images to restore correct order.
         await loadImages();
     }
 }
@@ -604,15 +705,22 @@ function updateProcessingStatus(status) {
 }
 
 async function pollProcessingStatus() {
+    if (!state.currentDataset) return;
+
     try {
-        const response = await fetch('/processing-status');
+        const response = await fetch(`/processing-status?dataset_id=${state.currentDataset}`);
+        if (!response.ok) {
+            throw new Error('Failed to fetch processing status.');
+        }
+
         const status = await response.json();
         updateProcessingStatus(status);
+
         if (status.is_processing) {
             setTimeout(pollProcessingStatus, 2000);
         }
     } catch (error) {
-        logger.error('Error polling status:', error);
+        console.error('Error polling status:', error);
     }
 }
 
@@ -646,12 +754,17 @@ window.addEventListener('load', () => {
     pollProcessingStatus();
 });
 
+window.state = state;
+
 window.addEventListener('DOMContentLoaded', () => {
+
   const savedWidth = localStorage.getItem('preferredGridWidth');
   if (savedWidth) {
     state.gridWidth = parseInt(savedWidth);
     elements.gridWidth.value = savedWidth;
   }
+  createDatasetSelector();
+  fetchAndPopulateDatasets();
   initializeCollectionsSidebar();
   updateGridLayout();
   loadImages();
