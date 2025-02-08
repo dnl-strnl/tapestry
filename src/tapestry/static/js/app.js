@@ -299,7 +299,7 @@ function displayResults(results, append = false) {
 }
 
 async function loadImages(page = 1, append = false) {
-    if (state.isLoading || (!append && state.isSearching) || !state.currentDataset) return;
+    if (state.isLoading || (!append && state.isSearching)) return;
 
     state.isLoading = true;
     elements.loadingIndicator.style.display = 'block';
@@ -321,14 +321,14 @@ async function loadImages(page = 1, append = false) {
         if (state.activeCollection) {
             processedImages = (data.images || []).map(img => ({
                 path: img.path,
-                filename: img.path,
+                filename: img.path.split('/').pop(),
                 prompt: img.prompt || img.filename || img.path,
-                url: getImageUrl(img)
+                url: window.utils.getImageUrl(img)
             }));
         } else {
             processedImages = (data.images || []).map(img => ({
                 filename: img.filename || img.path || img,
-                url: img.url || `/images/${img.filename || img.path || img}`,
+                url: img.url || window.utils.getImageUrl(img, state.currentDataset),
                 prompt: img.prompt || img.filename,
                 ...img
             }));

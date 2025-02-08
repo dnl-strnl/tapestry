@@ -154,6 +154,7 @@ class DatabaseManager:
         limit: int = None,
     ) -> Dict:
         logger.debug(f'search: {query_type=}, {query=}, {query_path=}')
+
         try:
             if query_type == 'text':
                 if not query:
@@ -195,7 +196,9 @@ class DatabaseManager:
         limit: int = 100
     ) -> Dict:
 
-        unique_results = {}
+        unique_results = []
+        seen_files = set()
+
         for idx, (doc, metadata, distance) in enumerate(zip(
             results['documents'][0],
             results['metadatas'][0],
@@ -205,24 +208,31 @@ class DatabaseManager:
                 continue
 
             filename = basename(doc)
-            is_inlier = distance < unique_results[filename]['distance']
-            if filename not in unique_results or is_inlier:
-                url = self.get_image_url(doc)
-                unique_results[filename] = {
-                    'path': doc,
-                    'filename': filename,
-                    'url': url,
-                    'distance': float(distance),
-                    'metadata': metadata,
-                    'rank': idx + 1
-                }
+            if filename in seen_files:
+                continue
 
-        formatted_results = list(unique_results.values())
-        formatted_results.sort(key=lambda x: x['distance'])
-        formatted_results = formatted_results[:limit]
+            seen_files.add(filename)
 
-        return {
-            'results': formatted_results,
-            'total': len(formatted_results),
-            'query_type': query_type
-        }
+            is_upload = exists(join(self.config['UPLOAD_FOLDER'], filename))
+            db_name = self.db_name.split('_')[0]
+            url = f"/uploads/{filename}?dataset_id={db_name}" if is_upload \
+                else f"/images/{filename}?dataset_id={db_name}"
+
+            result = {
+                'path': doc,
+                'filename': filename,
+                'url': url,
+                'distance': float(distance),
+                'metadata': metadata,
+                'rank': idx + 1
+            }
+
+            unique_results.append(result)
+
+        unique_results.sort(key=lambda x: x['distance'])
+        unique_results = unique_results[:limit]
+
+        for idx, result in enumerate(unique_results):
+            result['rank'] = idx + 1
+
+        return dict(results=unique_results, tital=len(unique_results), query_type=query_type)
