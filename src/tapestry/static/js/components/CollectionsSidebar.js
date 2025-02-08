@@ -83,7 +83,7 @@ const CollectionsSidebar = ({ onCollectionSelect, activeCollection }) => {
         }
     };
 
-    const handleDrop = async (e, collectionId) => {
+    async function handleDrop(e, collectionId) {
         e.preventDefault();
         e.stopPropagation();
         setDragOverId(null);
@@ -93,33 +93,17 @@ const CollectionsSidebar = ({ onCollectionSelect, activeCollection }) => {
             const data = JSON.parse(dataStr);
 
             if (data.type === 'internal' && data.path) {
-                // Check if this is a cross-collection drag.
-                if (data.sourceCollectionId && data.sourceCollectionId !== collectionId) {
-                    // This is a cross-collection drag, make a copy...
-                    const response = await fetch(`/collections/${collectionId}/images`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            image_paths: [data.path]
-                        })
-                    });
+                const response = await fetch(`/collections/${collectionId}/images`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_paths: [data.path],
+                        dataset_id: data.dataset_id
+                    })
+                });
 
-                    if (!response.ok) {
-                        throw new Error('Failed to copy image to collection');
-                    }
-                } else {
-                    // Normal drag to add image.
-                    const response = await fetch(`/collections/${collectionId}/images`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            image_paths: [data.path]
-                        })
-                    });
-
-                    if (!response.ok) {
-                        throw new Error('Failed to add image to collection.');
-                    }
+                if (!response.ok) {
+                    throw new Error('Failed to add image to collection');
                 }
 
                 if (activeCollection === collectionId) {
