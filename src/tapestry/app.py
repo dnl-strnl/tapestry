@@ -52,7 +52,8 @@ def make_app(cfg):
                 cfg.embedding_batch_size,
             )
             db_managers[dataset_id] = db_manager
-
+            init_thread = db_manager.start_initialization()
+            
         return db_managers[dataset_id]
 
     @app.route('/')

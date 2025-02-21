@@ -36,6 +36,7 @@ class DatabaseManager:
         self.embedding_model_address = embedding_model_address
         self.embedding_dimension = embedding_dimension
         self.embedding_image_size = embedding_image_size
+        self.initialization_complete = False
 
         logger.debug(f'manager: {db_path}, name: {db_name}, {self.config["IMAGE_FOLDER"]}')
 
@@ -66,44 +67,11 @@ class DatabaseManager:
             logger.error(f'{db_manager_init_error=}', exc_info=True)
             raise
 
-    def process_images_batch(self, image_paths: List[str]) -> None:
-
-        for i in range(0, len(image_paths), self.batch_size):
-            batch = image_paths[i:i + self.batch_size]
-            new_files = []
-            new_ids = []
-            new_metadata = []
-
-            for image_path in batch:
-                filename = basename(image_path)
-                logger.debug(f'processing image: {filename}')
-
-                existing_entries = self.collection.get(where=dict(filename=filename))
-
-                if existing_entries and len(existing_entries['ids']) > 0:
-                    logger.debug(f'image exists in collection: {filename}')
-                    continue
-
-                file_id = str(uuid.uuid4())
-                new_files.append(image_path)
-                new_ids.append(file_id)
-                new_metadata.append({
-                    'type': 'image',
-                    'filename': filename,
-                    'original_path': image_path,
-                    'processed': True
-                })
-
-            if new_files:
-                try:
-                    self.collection.add(
-                        documents=new_files,
-                        metadatas=new_metadata,
-                        ids=new_ids
-                    )
-                    self.config['PROCESSING_STATUS']['processed_count'] += len(new_files)
-                except Exception as process_batch_error:
-                    logger.error(f'{process_batch_error=}', exc_info=True)
+    def start_initialization(self) -> None:
+        thread = Thread(target=self.initialize_database)
+        thread.daemon = False
+        thread.start()
+        return thread
 
     def initialize_database(self) -> None:
         logger.debug('Starting database initialization')
@@ -114,12 +82,12 @@ class DatabaseManager:
             for ext in self.image_extensions:
                 pattern = join(self.config['IMAGE_FOLDER'], f'*{ext}')
                 found_files = glob(pattern)
-                logger.debug(f'Found {len(found_files)} files with pattern {pattern}')
+                logger.debug(f'Found {len(found_files)} files with pattern `{pattern}`.')
                 image_files.extend(found_files)
 
                 pattern_upper = join(self.config['IMAGE_FOLDER'], f'*{ext.upper()}')
                 found_files_upper = glob(pattern_upper)
-                logger.debug(f'found {len(found_files_upper)} files with pattern {pattern_upper}.')
+                logger.debug(f'Found {len(found_files_upper)} files with pattern `{pattern_upper}`.')
                 image_files.extend(found_files_upper)
 
             if not image_files:
@@ -132,19 +100,69 @@ class DatabaseManager:
             self.config['PROCESSING_STATUS']['total_count'] = len(image_files)
             self.config['PROCESSING_STATUS']['processed_count'] = 0
 
-            self.process_images_batch(image_files)
+            batch_size = min(self.batch_size, 32)
+            for i in range(0, len(image_files), batch_size):
+                batch = image_files[i:i + batch_size]
+                try:
+                    self.process_images_batch(batch)
+                    logger.debug(f'processed batch {i//batch_size + 1} / {len(image_files)//batch_size + 1}')
+                except Exception as batch_error:
+                    logger.error(f'{batch_error=}', exc_info=True)
 
         except Exception as db_init_error:
-            logger.error(f'{db_init_error=}', exc_info=True)
+            logger.error(f'{db_init_error}', exc_info=True)
         finally:
             self.config['PROCESSING_STATUS']['is_processing'] = False
-            processed_count = self.config["PROCESSING_STATUS"]['processed_count']
-            logger.info(f'db init complete: processed {processed_count} images.')
+            self.initialization_complete = True
+            processed_count = self.config['PROCESSING_STATUS']['processed_count']
+            logger.info(f'db init: processed {processed_count} images.')
 
-    def start_initialization(self) -> None:
-        thread = Thread(target=self.initialize_database)
-        thread.daemon = True
-        thread.start()
+    def process_images_batch(self, image_paths: List[str]) -> None:
+        new_files = []
+        new_ids = []
+        new_metadata = []
+
+        for image_path in image_paths:
+            try:
+                filename = basename(image_path)
+                logger.debug(f'processing image: {filename}')
+
+                existing_entries = self.collection.get(
+                    where={"filename": filename},
+                    include=["embeddings"]
+                )
+
+                if existing_entries and len(existing_entries['ids']) > 0:
+                    if existing_entries.get('embeddings', [None])[0] is not None:
+                        logger.debug(f'embeddings: {filename}')
+                        continue
+                    else:
+                        logger.warning(f'No embeddings: {filename}')
+
+                file_id = str(uuid.uuid4())
+                new_files.append(image_path)
+                new_ids.append(file_id)
+                new_metadata.append({
+                    'type': 'image',
+                    'filename': filename,
+                    'original_path': image_path,
+                    'processed': True
+                })
+
+            except Exception as image_error:
+                logger.error(f'{image_error}', exc_info=True)
+                continue
+
+        if new_files:
+            try:
+                self.collection.add(
+                    documents=new_files,
+                    metadatas=new_metadata,
+                    ids=new_ids
+                )
+                self.config['PROCESSING_STATUS']['processed_count'] += len(new_files)
+            except Exception as batch_add_error:
+                logger.error(f'{batch_add_error=}', exc_info=True)
 
     def perform_search(
         self,
